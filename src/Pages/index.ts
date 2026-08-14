@@ -1,0 +1,16 @@
+export { LoginPage } from "./LoginPage";
+export { DashboardPage } from "./DashboardPage";
+export { EmployeesPage } from "./EmployeesPage";
+export { ManagementPage } from "./ManagementPage";
+export { CompaniesPage } from "./CompaniesPage";
+export { SuperAdminRegionsPage } from "./SuperAdminRegionsPage";
+export { PlansPage } from "./PlansPage";
+export { SubscriptionsPage } from "./SubscriptionsPage";
+export { PatientsPage } from "./PatientsPage";
+export { OrderPage } from "./OrderPage";
+export { OrdersPage } from "./OrdersPage";
+export { ResultsPage } from "./ResultsPage";
+export { ShowResultPage } from "./ShowResultPage";
+export { ProfilePage } from "./ProfilePage";
+export { EditProfilePage } from "./EditProfilePage";
+export { SettingsPage } from "./SettingsPage";
