@@ -48,6 +48,7 @@ export type UsersFullParams = {
   page?: number;
   limit?: number;
   search?: string;
+  companyId?: number;
 };
 
 export type UsersFullResponse = {
@@ -106,8 +107,9 @@ function mergeUsersWithDetails(pageUsers: AppUser[], details: AppUser[]): AppUse
   });
 }
 
-export function getAllUsers() {
-  return apiRequest<AppUser[]>("/user/getall", {
+export function getAllUsers(companyId?: number) {
+  const query = companyId != null ? `?company_id=${companyId}` : "";
+  return apiRequest<AppUser[]>(`/user/getall${query}`, {
     method: "GET",
     fallbackError: "Foydalanuvchilarni yuklab bo'lmadi",
   });
@@ -118,6 +120,7 @@ export async function getUsersFull(params: UsersFullParams = {}): Promise<UsersF
   if (params.page != null) q.set("page", String(params.page));
   if (params.limit != null) q.set("limit", String(params.limit));
   if (params.search?.trim()) q.set("search", params.search.trim());
+  if (params.companyId != null) q.set("company_id", String(params.companyId));
 
   const qs = q.toString();
 
@@ -126,7 +129,7 @@ export async function getUsersFull(params: UsersFullParams = {}): Promise<UsersF
       method: "GET",
       fallbackError: "Foydalanuvchilarni yuklab bo'lmadi",
     }),
-    getAllUsers().catch(() => [] as AppUser[]),
+    getAllUsers(params.companyId).catch(() => [] as AppUser[]),
   ]);
 
   const page = normalizeFullResponse(raw, params);

@@ -733,7 +733,15 @@ function CompanyCreateModal({
   );
 }
 
-export function CompaniesPage({ primaryColor }: { primaryColor: string }) {
+export function CompaniesPage({
+  primaryColor,
+  scopedRegionId,
+  onOpenCompany,
+}: {
+  primaryColor: string;
+  scopedRegionId?: number | null;
+  onOpenCompany?: (company: Company) => void;
+}) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
   const [regionsLoading, setRegionsLoading] = useState(true);
@@ -752,11 +760,14 @@ export function CompaniesPage({ primaryColor }: { primaryColor: string }) {
     | null
   >(null);
 
+  /** Faqat super_admin yaratadi / tahrirlaydi / o'chiradi; admin faqat ko'radi. */
+  const canManage = isSuperAdmin();
+
   const [lockedRegionId, setLockedRegionId] = useState<number | null>(() =>
-    isSuperAdmin() ? null : getStoredRegionId(),
+    scopedRegionId ?? (isSuperAdmin() ? null : getStoredRegionId()),
   );
   const [regionReady, setRegionReady] = useState(
-    () => isSuperAdmin() || getStoredRegionId() != null,
+    () => scopedRegionId != null || isSuperAdmin() || getStoredRegionId() != null,
   );
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
@@ -853,6 +864,7 @@ export function CompaniesPage({ primaryColor }: { primaryColor: string }) {
   };
 
   const handleCreate = async (form: CreateForm) => {
+    if (!canManage) return;
     setSaving(true);
     try {
       const companyPayload = toCompanyPayload({
@@ -909,7 +921,7 @@ export function CompaniesPage({ primaryColor }: { primaryColor: string }) {
   };
 
   const handleUpdate = async (form: EditForm) => {
-    if (modal?.type !== "edit") return;
+    if (!canManage || modal?.type !== "edit") return;
     setSaving(true);
     try {
       const payload = toCompanyPayload({
@@ -929,7 +941,7 @@ export function CompaniesPage({ primaryColor }: { primaryColor: string }) {
   };
 
   const handleDelete = async () => {
-    if (modal?.type !== "delete") return;
+    if (!canManage || modal?.type !== "delete") return;
     setSaving(true);
     try {
       await deleteCompany(modal.company.id);
@@ -989,15 +1001,17 @@ export function CompaniesPage({ primaryColor }: { primaryColor: string }) {
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </button>
 
-          <button
-            onClick={() => setModal({ type: "add" })}
-            disabled={!regionReady}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-[13px] font-semibold transition-all hover:opacity-90 active:scale-[0.98] shadow-sm disabled:opacity-60"
-            style={{ background: primaryColor }}
-          >
-            <Plus className="w-4 h-4" />
-            Yangi tashkilot
-          </button>
+          {canManage && (
+            <button
+              onClick={() => setModal({ type: "add" })}
+              disabled={!regionReady}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-[13px] font-semibold transition-all hover:opacity-90 active:scale-[0.98] shadow-sm disabled:opacity-60"
+              style={{ background: primaryColor }}
+            >
+              <Plus className="w-4 h-4" />
+              Yangi tashkilot
+            </button>
+          )}
         </div>
 
         {error && (
@@ -1038,7 +1052,9 @@ export function CompaniesPage({ primaryColor }: { primaryColor: string }) {
                       <div>
                         <p className="text-sm font-semibold text-foreground">Tashkilot topilmadi</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Yangi tashkilot qo'shing yoki qidiruvni o'zgartiring
+                          {canManage
+                            ? "Yangi tashkilot qo'shing yoki qidiruvni o'zgartiring"
+                            : "Qidiruvni o'zgartiring yoki keyinroq qayta urinib ko'ring"}
                         </p>
                       </div>
                     </div>
@@ -1046,7 +1062,13 @@ export function CompaniesPage({ primaryColor }: { primaryColor: string }) {
                 </tr>
               ) : (
                 companies.map(company => (
-                  <tr key={company.id} className="border-b border-border hover:bg-secondary/30 transition-colors group">
+                  <tr
+                    key={company.id}
+                    onClick={() => onOpenCompany?.(company)}
+                    className={`border-b border-border hover:bg-secondary/30 transition-colors group ${
+                      onOpenCompany ? "cursor-pointer" : ""
+                    }`}
+                  >
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3">
                         <div
@@ -1097,22 +1119,30 @@ export function CompaniesPage({ primaryColor }: { primaryColor: string }) {
                       {formatDate(company.createdAt)}
                     </td>
                     <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => setModal({ type: "edit", company })}
-                          className="p-1.5 rounded-lg hover:bg-violet-50 hover:text-violet-600 text-muted-foreground transition-colors"
-                          title="Tahrirlash"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setModal({ type: "delete", company })}
-                          className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-500 text-muted-foreground transition-colors"
-                          title="O'chirish"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      {canManage && (
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={event => {
+                              event.stopPropagation();
+                              setModal({ type: "edit", company });
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-violet-50 hover:text-violet-600 text-muted-foreground transition-colors"
+                            title="Tahrirlash"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={event => {
+                              event.stopPropagation();
+                              setModal({ type: "delete", company });
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-500 text-muted-foreground transition-colors"
+                            title="O'chirish"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -1185,7 +1215,7 @@ export function CompaniesPage({ primaryColor }: { primaryColor: string }) {
         </div>
       </div>
 
-      {modal?.type === "add" && (
+      {canManage && modal?.type === "add" && (
         <CompanyCreateModal
           primaryColor={primaryColor}
           saving={saving}
@@ -1196,7 +1226,7 @@ export function CompaniesPage({ primaryColor }: { primaryColor: string }) {
           onClose={() => setModal(null)}
         />
       )}
-      {modal?.type === "edit" && (() => {
+      {canManage && modal?.type === "edit" && (() => {
         const director = findCompanyDirector(modal.company);
         const companyRegionId = modal.company.region?.id;
         const resolvedRegionId =
@@ -1240,7 +1270,7 @@ export function CompaniesPage({ primaryColor }: { primaryColor: string }) {
           />
         );
       })()}
-      {modal?.type === "delete" && (
+      {canManage && modal?.type === "delete" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" onClick={() => setModal(null)} />
           <div className="relative bg-card rounded-3xl border border-border shadow-2xl w-full max-w-sm overflow-hidden">

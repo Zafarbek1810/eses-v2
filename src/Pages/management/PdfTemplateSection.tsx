@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { getAllAnalyses, type Analysis } from "@/api/analysis";
 import { getAllLaboratories, type Laboratory } from "@/api/laboratory";
+import { getCompanyById, type Company } from "@/api/company";
 import { ApiError } from "@/api/client";
 import { CustomPdfTable } from "@/components/CustomPdfTable";
 import {
@@ -59,6 +60,25 @@ import {
 } from "@/lib/pdfTemplate";
 
 type ToastMsg = { id: number; text: string; type: "success" | "error" };
+
+function laboratoryCompanyId(lab: Laboratory): number | null {
+  const value = lab.company?.id ?? lab.company_id ?? lab.companyId;
+  const id = Number(value);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+function companyLaboratories(company: Company): { present: boolean; items: Laboratory[] } {
+  const raw = company as Company & {
+    laboratory?: unknown;
+    laboratories?: unknown;
+    labs?: unknown;
+  };
+  const candidate = raw.laboratory ?? raw.laboratories ?? raw.labs;
+  return {
+    present: Array.isArray(candidate),
+    items: Array.isArray(candidate) ? candidate as Laboratory[] : [],
+  };
+}
 
 type ToolDef = {
   type: PdfElementType;
@@ -247,6 +267,7 @@ export function PdfTemplateSection({
   onGlobalEditConsumed,
   onGlobalEditClose,
   onGlobalEditSaved,
+  companyId,
 }: {
   primaryColor: string;
   importTemplate?: PdfTemplate | null;
@@ -258,6 +279,7 @@ export function PdfTemplateSection({
   onGlobalEditConsumed?: () => void;
   onGlobalEditClose?: () => void;
   onGlobalEditSaved?: () => void;
+  companyId?: number;
 }) {
   const [templates, setTemplates] = useState<PdfTemplate[]>([]);
   const [template, setTemplate] = useState<PdfTemplate>(() => emptyTemplate());
@@ -316,17 +338,35 @@ export function PdfTemplateSection({
   const loadMeta = async () => {
     setLoadingMeta(true);
     try {
-      const [a, labs, remoteTemplates] = await Promise.all([
-        getAllAnalyses(),
-        getAllLaboratories(),
+      const [allAnalyses, allLabs, remoteTemplates, company] = await Promise.all([
+        getAllAnalyses(companyId),
+        getAllLaboratories(companyId),
         fetchPdfTemplatesFromApi().catch(err => {
           console.warn("[PDF] onlinestorage/getall yuklanmadi:", err);
           return loadPdfTemplates();
         }),
+        companyId != null ? getCompanyById(companyId) : Promise.resolve(null),
       ]);
-      setAnalyses(Array.isArray(a) ? a : []);
-      setLaboratories(Array.isArray(labs) ? labs : []);
-      const list = Array.isArray(remoteTemplates) ? remoteTemplates : loadPdfTemplates();
+      const nested = company ? companyLaboratories(company) : null;
+      const labs = companyId == null
+        ? allLabs
+        : nested?.present
+          ? nested.items
+          : allLabs.filter(lab => laboratoryCompanyId(lab) === companyId);
+      const labIds = new Set(labs.map(lab => lab.id));
+      const analyses = companyId == null
+        ? allAnalyses
+        : allAnalyses.filter(item => item.laboratory?.id != null && labIds.has(item.laboratory.id));
+      setAnalyses(analyses);
+      setLaboratories(labs);
+      const analysisIds = new Set(analyses.map(item => item.id));
+      const source = Array.isArray(remoteTemplates) ? remoteTemplates : loadPdfTemplates();
+      const list = companyId == null
+        ? source
+        : source.filter(item => {
+            const id = resolvePdfTemplateAnalysisId(item);
+            return id != null && analysisIds.has(id);
+          });
       applyLoadedTemplates(list);
       if (list.length === 0) {
         pushToast("PDF shablonlar topilmadi (onlinestorage)", "error");
@@ -342,7 +382,7 @@ export function PdfTemplateSection({
 
   useEffect(() => {
     void loadMeta();
-  }, []);
+  }, [companyId]);
 
   // Global PDF tab → "Tahrirlash": avval analiz tanlash, keyin editor
   useEffect(() => {
@@ -547,7 +587,7 @@ export function PdfTemplateSection({
     if (isGlobalEditMode) {
       setSavingGlobal(true);
       try {
-        const saved = await upsertPdfTemplateGlobal(template);
+        const saved = await upsertPdfTemplateGlobal(template, companyId ?? template.companyId ?? undefined);
         setTemplate(saved);
         pushToast("Global PDF shablon yangilandi");
         onGlobalEditSaved?.();
@@ -599,7 +639,7 @@ export function PdfTemplateSection({
   const handleSaveGlobal = async () => {
     setSavingGlobal(true);
     try {
-      const saved = await upsertPdfTemplateGlobal(template);
+      const saved = await upsertPdfTemplateGlobal(template, companyId ?? template.companyId ?? undefined);
       setTemplate(t => ({
         ...t,
         globalStorageId: saved.globalStorageId,

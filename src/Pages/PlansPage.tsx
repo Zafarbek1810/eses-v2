@@ -10,9 +10,15 @@ import {
 } from "@/api/plan";
 import { ApiError } from "@/api/client";
 import { formatDate } from "@/lib/formatDate";
+import { getStoredUser } from "@/api/session";
+import { normalizeRoleName } from "@/lib/roles";
 
 type Toast = { id: number; text: string; type: "success" | "error" };
 type Modal = { type: "add" } | { type: "edit" | "delete"; plan: Plan } | null;
+
+function canManagePlans(): boolean {
+  return normalizeRoleName(getStoredUser()?.role?.name) === "super_admin";
+}
 
 /** Faqat raqamlarni qoldiradi (so'm uchun butun son). */
 function digitsOnly(value: string): string {
@@ -147,6 +153,7 @@ export function PlansPage({ primaryColor }: { primaryColor: string }) {
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<Modal>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const canManage = canManagePlans();
 
   const toast = (text: string, type: Toast["type"] = "success") => {
     const id = Date.now();
@@ -168,7 +175,7 @@ export function PlansPage({ primaryColor }: { primaryColor: string }) {
   }, [plans, search]);
 
   const save = async (payload: PlanPayload) => {
-    if (!modal || modal.type === "delete") return;
+    if (!canManage || !modal || modal.type === "delete") return;
     setSaving(true);
     try {
       if (modal.type === "add") await addPlan(payload);
@@ -180,7 +187,7 @@ export function PlansPage({ primaryColor }: { primaryColor: string }) {
     finally { setSaving(false); }
   };
   const remove = async () => {
-    if (modal?.type !== "delete") return;
+    if (!canManage || modal?.type !== "delete") return;
     setSaving(true);
     try {
       await deletePlan(modal.plan.id);
@@ -201,7 +208,9 @@ export function PlansPage({ primaryColor }: { primaryColor: string }) {
             {search && <button onClick={() => setSearch("")}><X className="h-3.5 w-3.5 text-muted-foreground" /></button>}
           </div>
           <button onClick={() => void load()} className="rounded-xl border border-border p-2.5 text-muted-foreground hover:bg-secondary"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /></button>
-          <button onClick={() => setModal({ type: "add" })} style={{ background: primaryColor }} className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold text-white"><Plus className="h-4 w-4" />Yangi tarif</button>
+          {canManage && (
+            <button onClick={() => setModal({ type: "add" })} style={{ background: primaryColor }} className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold text-white"><Plus className="h-4 w-4" />Yangi tarif</button>
+          )}
         </div>
         {error && <div className="mx-5 mt-4 flex gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700"><AlertCircle className="h-4 w-4" />{error}</div>}
         <div className="overflow-x-auto">
@@ -217,10 +226,14 @@ export function PlansPage({ primaryColor }: { primaryColor: string }) {
                       <td className="whitespace-nowrap px-5 py-3.5 text-[13px] font-semibold">{formatSomDisplay(plan.price)}</td>
                       <td className="px-5 py-3.5"><span className="rounded-lg bg-secondary px-2 py-1 text-[11px] font-semibold">{plan.billingCycle === "yearly" ? "Yillik" : "Oylik"}</span></td>
                       <td className="whitespace-pre-line px-5 py-3.5 text-[12px] text-muted-foreground">{plan.createdAt ? formatDate(plan.createdAt) : "—"}</td>
-                      <td className="px-5 py-3.5"><div className="flex gap-1 opacity-0 group-hover:opacity-100">
-                        <button onClick={() => setModal({ type: "edit", plan })} className="rounded-lg p-1.5 text-muted-foreground hover:text-violet-600"><Edit3 className="h-3.5 w-3.5" /></button>
-                        <button onClick={() => setModal({ type: "delete", plan })} className="rounded-lg p-1.5 text-muted-foreground hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
-                      </div></td>
+                      <td className="px-5 py-3.5">
+                        {canManage && (
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                            <button onClick={() => setModal({ type: "edit", plan })} className="rounded-lg p-1.5 text-muted-foreground hover:text-violet-600"><Edit3 className="h-3.5 w-3.5" /></button>
+                            <button onClick={() => setModal({ type: "delete", plan })} className="rounded-lg p-1.5 text-muted-foreground hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))}
             </tbody>
@@ -229,9 +242,9 @@ export function PlansPage({ primaryColor }: { primaryColor: string }) {
         <div className="border-t border-border px-5 py-3.5 text-xs text-muted-foreground">{filtered.length} ta tarif</div>
       </div>
 
-      {modal?.type === "add" && <PlanModal initial={EMPTY} saving={saving} primaryColor={primaryColor} title="Yangi tarif" onSave={save} onClose={() => setModal(null)} />}
-      {modal?.type === "edit" && <PlanModal initial={{ name: modal.plan.name, description: modal.plan.description, price: String(modal.plan.price), billingCycle: modal.plan.billingCycle }} saving={saving} primaryColor={primaryColor} title="Tarifni tahrirlash" onSave={save} onClose={() => setModal(null)} />}
-      {modal?.type === "delete" && <div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/45" onClick={() => setModal(null)} /><div className="relative w-full max-w-sm rounded-3xl border border-border bg-card p-6 text-center shadow-2xl"><Trash2 className="mx-auto mb-4 h-8 w-8 text-red-500" /><h2 className="font-bold">Tarifni o&apos;chirish</h2><p className="my-3 text-[13px] text-muted-foreground">&quot;{modal.plan.name}&quot; tarifini o&apos;chirasizmi?</p><div className="flex gap-3"><button onClick={() => setModal(null)} className="flex-1 rounded-xl border border-border py-2.5 text-sm">Bekor qilish</button><button disabled={saving} onClick={() => void remove()} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-500 py-2.5 text-sm text-white">{saving && <Loader2 className="h-4 w-4 animate-spin" />}O&apos;chirish</button></div></div></div>}
+      {canManage && modal?.type === "add" && <PlanModal initial={EMPTY} saving={saving} primaryColor={primaryColor} title="Yangi tarif" onSave={save} onClose={() => setModal(null)} />}
+      {canManage && modal?.type === "edit" && <PlanModal initial={{ name: modal.plan.name, description: modal.plan.description, price: String(modal.plan.price), billingCycle: modal.plan.billingCycle }} saving={saving} primaryColor={primaryColor} title="Tarifni tahrirlash" onSave={save} onClose={() => setModal(null)} />}
+      {canManage && modal?.type === "delete" && <div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/45" onClick={() => setModal(null)} /><div className="relative w-full max-w-sm rounded-3xl border border-border bg-card p-6 text-center shadow-2xl"><Trash2 className="mx-auto mb-4 h-8 w-8 text-red-500" /><h2 className="font-bold">Tarifni o&apos;chirish</h2><p className="my-3 text-[13px] text-muted-foreground">&quot;{modal.plan.name}&quot; tarifini o&apos;chirasizmi?</p><div className="flex gap-3"><button onClick={() => setModal(null)} className="flex-1 rounded-xl border border-border py-2.5 text-sm">Bekor qilish</button><button disabled={saving} onClick={() => void remove()} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-500 py-2.5 text-sm text-white">{saving && <Loader2 className="h-4 w-4 animate-spin" />}O&apos;chirish</button></div></div></div>}
       <div className="fixed bottom-6 right-6 z-[60] space-y-2">{toasts.map(t => <div key={t.id} className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm shadow-xl ${t.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800"}`}>{t.type === "success" ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}{t.text}</div>)}</div>
     </main>
   );

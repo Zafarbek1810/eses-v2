@@ -6,6 +6,7 @@ import {
   ChevronLeft, ChevronsLeft, ChevronsRight, Users, UserCog,
 } from "lucide-react";
 import {
+  getAllLaboratories,
   getLaboratoriesFull,
   getLaboratoryById,
   addLaboratory,
@@ -18,6 +19,7 @@ import {
   type LabAssistant,
 } from "@/api/laboratory";
 import { getAllUsers, type AppUser } from "@/api/user";
+import { getCompanyById, type Company } from "@/api/company";
 import { ApiError } from "@/api/client";
 import { formatDate } from "@/lib/formatDate";
 
@@ -30,6 +32,25 @@ function assistantLabel(a: LabAssistant | AppUser) {
   if (name) return name;
   if (typeof a.email === "string" && a.email) return a.email;
   return `#${a.id}`;
+}
+
+function laboratoryCompanyId(lab: Laboratory): number | null {
+  const value = lab.company?.id ?? lab.company_id ?? lab.companyId;
+  const id = Number(value);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+function companyLaboratories(company: Company): { present: boolean; items: Laboratory[] } {
+  const raw = company as Company & {
+    laboratory?: unknown;
+    laboratories?: unknown;
+    labs?: unknown;
+  };
+  const candidate = raw.laboratory ?? raw.laboratories ?? raw.labs;
+  return {
+    present: Array.isArray(candidate),
+    items: Array.isArray(candidate) ? candidate as Laboratory[] : [],
+  };
 }
 
 function LabFormModal({
@@ -350,7 +371,13 @@ function DirectorModal({
   );
 }
 
-export function LaboratoriesSection({ primaryColor }: { primaryColor: string }) {
+export function LaboratoriesSection({
+  primaryColor,
+  companyId,
+}: {
+  primaryColor: string;
+  companyId?: number;
+}) {
   const [labs, setLabs] = useState<Laboratory[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -384,7 +411,30 @@ export function LaboratoriesSection({ primaryColor }: { primaryColor: string }) 
     setLoading(true);
     setError(null);
     try {
-      const res = await getLaboratoriesFull({ page: p, limit: PER_PAGE, search: s });
+      if (companyId != null) {
+        const [allLabs, company] = await Promise.all([
+          getAllLaboratories(companyId),
+          getCompanyById(companyId),
+        ]);
+        const nested = companyLaboratories(company);
+        const scoped = nested.present
+          ? nested.items
+          : allLabs.filter(lab => laboratoryCompanyId(lab) === companyId);
+        const query = s.trim().toLowerCase();
+        const filtered = scoped.filter(lab => !query || lab.name.toLowerCase().includes(query));
+        const start = (p - 1) * PER_PAGE;
+        setLabs(filtered.slice(start, start + PER_PAGE));
+        setTotal(filtered.length);
+        setPage(p);
+        return;
+      }
+
+      const res = await getLaboratoriesFull({
+        page: p,
+        limit: PER_PAGE,
+        search: s,
+        companyId,
+      });
       setLabs(res.data);
       setTotal(res.total);
       setPage(res.page);
@@ -413,18 +463,44 @@ export function LaboratoriesSection({ primaryColor }: { primaryColor: string }) 
   useEffect(() => {
     void (async () => {
       try {
-        const list = await getAllUsers();
-        setUsers(Array.isArray(list) ? list : []);
+        if (companyId != null) {
+          const company = await getCompanyById(companyId);
+          setUsers((Array.isArray(company.user) ? company.user : []).map(user => ({
+            id: user.id,
+            username: user.username,
+            surname: user.surname,
+            email: user.email,
+            createdAt: user.createdAt ?? "",
+            role: user.role
+              ? {
+                  id: user.role.id,
+                  name: user.role.name,
+                  description: user.role.description ?? "",
+                  createdAt: user.role.createdAt ?? "",
+                }
+              : null,
+            company: {
+              id: company.id,
+              name: company.name,
+              description: company.description,
+              address: company.address,
+              createdAt: company.createdAt,
+            },
+          })));
+        } else {
+          const list = await getAllUsers();
+          setUsers(Array.isArray(list) ? list : []);
+        }
       } catch {
         setUsers([]);
       }
     })();
-  }, []);
+  }, [companyId]);
 
   useEffect(() => {
     void loadLabs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, search]);
+  }, [page, search, companyId]);
 
   const applySearch = () => {
     setPage(1);
@@ -437,7 +513,10 @@ export function LaboratoriesSection({ primaryColor }: { primaryColor: string }) 
     setSaving(true);
     try {
       if (modal.type === "add") {
-        await addLaboratory(payload);
+        await addLaboratory({
+          ...payload,
+          ...(companyId != null ? { company_id: companyId } : {}),
+        });
         pushToast(`${payload.name} qo'shildi`);
         setModal(null);
         setPage(1);

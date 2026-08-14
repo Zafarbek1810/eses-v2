@@ -43,10 +43,12 @@ const PER_PAGE = 10;
 export function GlobalPdfTemplateSection({
   primaryColor,
   onAdaptForLocal,
+  companyId,
 }: {
   primaryColor: string;
   /** Eski logika: clone qilib PDF shablon bo'limida online storage'ga saqlash */
   onAdaptForLocal: (template: PdfTemplate) => void;
+  companyId?: number;
 }) {
   const [items, setItems] = useState<GlobalStorage[]>([]);
   const [total, setTotal] = useState(0);
@@ -113,8 +115,8 @@ export function GlobalPdfTemplateSection({
     void (async () => {
       try {
         const [labs, allAnalyses] = await Promise.all([
-          getAllLaboratories(),
-          getAllAnalyses(),
+          getAllLaboratories(companyId),
+          getAllAnalyses(companyId),
         ]);
         setLaboratories(Array.isArray(labs) ? labs : []);
         setAnalyses(Array.isArray(allAnalyses) ? allAnalyses : []);
@@ -124,7 +126,7 @@ export function GlobalPdfTemplateSection({
       await load();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load only
-  }, []);
+  }, [companyId]);
 
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
@@ -248,6 +250,7 @@ export function GlobalPdfTemplateSection({
     return (
       <PdfTemplateSection
         primaryColor={primaryColor}
+        companyId={companyId}
         globalEditTemplate={editing}
         onGlobalEditConsumed={() => {
           /* editor ichiga o'tkazildi; parentda editing saqlanadi Orqaga uchun */

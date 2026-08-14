@@ -17,6 +17,9 @@ export type Analysis = {
   /** PDF shablon mavjudligi (`/onlinestorage`) */
   onlinestorage?: boolean;
   onlineStorage?: boolean;
+  company_id?: number | null;
+  companyId?: number | null;
+  company?: { id: number; name?: string } | null;
 };
 
 export type AnalysisPayload = {
@@ -45,6 +48,7 @@ export type AnalysesFullParams = {
   page?: number;
   limit?: number;
   search?: string;
+  companyId?: number;
 };
 
 export type AnalysesFullResponse = {
@@ -102,6 +106,15 @@ function normalizeAnalysisRecord(raw: unknown): Analysis | null {
     createdAt: String(o.createdAt ?? o.created_at ?? ""),
     laboratory,
     onlinestorage: analysisHasOnlineStorage(o as unknown as Analysis),
+    company_id: Number.isFinite(Number(o.company_id)) ? Number(o.company_id) : null,
+    companyId: Number.isFinite(Number(o.companyId)) ? Number(o.companyId) : null,
+    company:
+      o.company && typeof o.company === "object"
+        ? {
+            id: Number((o.company as Record<string, unknown>).id),
+            name: String((o.company as Record<string, unknown>).name ?? ""),
+          }
+        : null,
   };
 }
 
@@ -157,8 +170,9 @@ function normalizeFullResponse(
   return { data: [], total: 0, page, limit };
 }
 
-export async function getAllAnalyses() {
-  const raw = await apiRequest<unknown>("/analysis/getall", {
+export async function getAllAnalyses(companyId?: number) {
+  const query = companyId != null ? `?company_id=${companyId}` : "";
+  const raw = await apiRequest<unknown>(`/analysis/getall${query}`, {
     method: "GET",
     fallbackError: "Analizlarni yuklab bo'lmadi",
   });
@@ -172,6 +186,7 @@ export async function getAnalysesFull(
   if (params.page != null) q.set("page", String(params.page));
   if (params.limit != null) q.set("limit", String(params.limit));
   if (params.search?.trim()) q.set("search", params.search.trim());
+  if (params.companyId != null) q.set("company_id", String(params.companyId));
 
   const qs = q.toString();
   const raw = await apiRequest<unknown>(`/analysis/getfull${qs ? `?${qs}` : ""}`, {

@@ -15,6 +15,7 @@ export type NavId =
   | "region-admins"
   | "plans"
   | "subscriptions"
+  | "history"
   | "patients"
   | "kassa"
   | "orders"
@@ -22,9 +23,16 @@ export type NavId =
   | "employees";
 
 const ROLE_NAV: Record<AppRole, readonly NavId[]> = {
-  super_admin: ["region-admins", "plans", "subscriptions"],
-  admin: ["dashboard", "companies"],
-  director: ["dashboard", "management", "patients", "kassa", "orders", "results"],
+  super_admin: ["dashboard", "region-admins", "plans", "subscriptions", "history"],
+  admin: ["dashboard", "companies", "plans"],
+  director: [
+    "dashboard",
+    "management",
+    // "patients",
+    // "kassa",
+    // "orders",
+    // "results",
+  ],
   kassir: ["patients", "kassa", "results"],
   lab_director: ["dashboard", "orders", "results"],
   lab_asistant: ["dashboard", "results"],

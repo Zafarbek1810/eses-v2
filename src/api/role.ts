@@ -6,6 +6,9 @@ export type Role = {
   description: string;
   createdAt: string;
   user: unknown[];
+  company_id?: number | null;
+  companyId?: number | null;
+  company?: { id: number; name?: string } | null;
 };
 
 export type RolePayload = {
@@ -30,8 +33,9 @@ export function extractRoleId(raw: unknown): number | null {
   return typeof candidate === "number" ? candidate : null;
 }
 
-export function getAllRoles() {
-  return apiRequest<Role[]>("/role/getall", {
+export function getAllRoles(companyId?: number) {
+  const query = companyId != null ? `?company_id=${companyId}` : "";
+  return apiRequest<Role[]>(`/role/getall${query}`, {
     method: "GET",
     fallbackError: "Rollarni yuklab bo'lmadi",
   });

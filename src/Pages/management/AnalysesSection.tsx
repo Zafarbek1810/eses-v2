@@ -6,6 +6,7 @@ import {
   ChevronLeft, ChevronsLeft, ChevronsRight,
 } from "lucide-react";
 import {
+  getAllAnalyses,
   getAnalysesFull,
   addAnalysis,
   updateAnalysis,
@@ -15,6 +16,7 @@ import {
   type AnalysisPayload,
 } from "@/api/analysis";
 import { getAllLaboratories, type Laboratory } from "@/api/laboratory";
+import { getCompanyById, type Company } from "@/api/company";
 import { ApiError } from "@/api/client";
 import { formatDate } from "@/lib/formatDate";
 
@@ -35,6 +37,25 @@ const EMPTY_FORM: AnalysisForm = {
 };
 
 const PER_PAGE = 10;
+
+function laboratoryCompanyId(lab: Laboratory): number | null {
+  const value = lab.company?.id ?? lab.company_id ?? lab.companyId;
+  const id = Number(value);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+function companyLaboratories(company: Company): { present: boolean; items: Laboratory[] } {
+  const raw = company as Company & {
+    laboratory?: unknown;
+    laboratories?: unknown;
+    labs?: unknown;
+  };
+  const candidate = raw.laboratory ?? raw.laboratories ?? raw.labs;
+  return {
+    present: Array.isArray(candidate),
+    items: Array.isArray(candidate) ? candidate as Laboratory[] : [],
+  };
+}
 
 function formatPrice(price: unknown) {
   const n = Number(price);
@@ -197,9 +218,11 @@ function AnalysisFormModal({
 export function AnalysesSection({
   primaryColor,
   onOpenPdfTemplate,
+  companyId,
 }: {
   primaryColor: string;
   onOpenPdfTemplate?: (item: Analysis) => void;
+  companyId?: number;
 }) {
   const [items, setItems] = useState<Analysis[]>([]);
   const [laboratories, setLaboratories] = useState<Laboratory[]>([]);
@@ -233,7 +256,38 @@ export function AnalysesSection({
     setLoading(true);
     setError(null);
     try {
-      const res = await getAnalysesFull({ page: p, limit: PER_PAGE, search: s });
+      if (companyId != null) {
+        const [allItems, allLabs, company] = await Promise.all([
+          getAllAnalyses(companyId),
+          getAllLaboratories(companyId),
+          getCompanyById(companyId),
+        ]);
+        const nested = companyLaboratories(company);
+        const scopedLabs = nested.present
+          ? nested.items
+          : allLabs.filter(lab => laboratoryCompanyId(lab) === companyId);
+        const labIds = new Set(scopedLabs.map(lab => lab.id));
+        const query = s.trim().toLowerCase();
+        const scopedItems = allItems.filter(item => {
+          if (item.laboratory?.id == null || !labIds.has(item.laboratory.id)) return false;
+          return !query
+            || item.name.toLowerCase().includes(query)
+            || item.shortname.toLowerCase().includes(query);
+        });
+        const start = (p - 1) * PER_PAGE;
+        setLaboratories(scopedLabs);
+        setItems(scopedItems.slice(start, start + PER_PAGE));
+        setTotal(scopedItems.length);
+        setPage(p);
+        return;
+      }
+
+      const res = await getAnalysesFull({
+        page: p,
+        limit: PER_PAGE,
+        search: s,
+        companyId,
+      });
       setItems(res.data);
       setTotal(res.total);
       setPage(res.page);
@@ -249,18 +303,31 @@ export function AnalysesSection({
   useEffect(() => {
     void (async () => {
       try {
-        const list = await getAllLaboratories();
-        setLaboratories(Array.isArray(list) ? list : []);
+        if (companyId != null) {
+          const [list, company] = await Promise.all([
+            getAllLaboratories(companyId),
+            getCompanyById(companyId),
+          ]);
+          const nested = companyLaboratories(company);
+          setLaboratories(
+            nested.present
+              ? nested.items
+              : list.filter(lab => laboratoryCompanyId(lab) === companyId),
+          );
+        } else {
+          const list = await getAllLaboratories();
+          setLaboratories(Array.isArray(list) ? list : []);
+        }
       } catch {
         setLaboratories([]);
       }
     })();
-  }, []);
+  }, [companyId]);
 
   useEffect(() => {
     void loadItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, search]);
+  }, [page, search, companyId]);
 
   const applySearch = () => {
     setPage(1);

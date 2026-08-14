@@ -15,6 +15,7 @@ import {
   type UserUpdatePayload,
 } from "@/api/user";
 import { getAllRoles, type Role } from "@/api/role";
+import { getCompanyById } from "@/api/company";
 import { getStoredCompanyId } from "@/api/session";
 import { ApiError } from "@/api/client";
 import { formatDate } from "@/lib/formatDate";
@@ -209,7 +210,13 @@ function UserFormModal({
   );
 }
 
-export function UsersSection({ primaryColor }: { primaryColor: string }) {
+export function UsersSection({
+  primaryColor,
+  companyId,
+}: {
+  primaryColor: string;
+  companyId?: number;
+}) {
   const [users, setUsers] = useState<AppUser[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
@@ -241,7 +248,50 @@ export function UsersSection({ primaryColor }: { primaryColor: string }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await getUsersFull({ page: p, limit: PER_PAGE, search: s });
+      if (companyId != null) {
+        const company = await getCompanyById(companyId);
+        const query = s.trim().toLowerCase();
+        const companyUsers = (Array.isArray(company.user) ? company.user : [])
+          .map<AppUser>(user => ({
+            id: user.id,
+            username: user.username,
+            surname: user.surname,
+            email: user.email,
+            createdAt: user.createdAt ?? "",
+            role: user.role
+              ? {
+                  id: user.role.id,
+                  name: user.role.name,
+                  description: user.role.description ?? "",
+                  createdAt: user.role.createdAt ?? "",
+                }
+              : null,
+            company: {
+              id: company.id,
+              name: company.name,
+              description: company.description,
+              address: company.address,
+              createdAt: company.createdAt,
+            },
+          }))
+          .filter(user => {
+            if (!query) return true;
+            return [user.username, user.surname, user.email]
+              .some(value => value.toLowerCase().includes(query));
+          });
+        const start = (p - 1) * PER_PAGE;
+        setUsers(companyUsers.slice(start, start + PER_PAGE));
+        setTotal(companyUsers.length);
+        setPage(p);
+        return;
+      }
+
+      const res = await getUsersFull({
+        page: p,
+        limit: PER_PAGE,
+        search: s,
+        companyId,
+      });
       setUsers(res.data);
       setTotal(res.total);
       setPage(res.page);
@@ -257,18 +307,41 @@ export function UsersSection({ primaryColor }: { primaryColor: string }) {
   useEffect(() => {
     void (async () => {
       try {
-        const list = await getAllRoles();
-        setRoles(Array.isArray(list) ? list : []);
+        if (companyId != null) {
+          const [list, company] = await Promise.all([
+            getAllRoles(companyId),
+            getCompanyById(companyId),
+          ]);
+          const scoped = (Array.isArray(list) ? list : []).filter(role => {
+            const id = role.company?.id ?? role.company_id ?? role.companyId;
+            return id === companyId;
+          });
+          const byId = new Map(scoped.map(role => [role.id, role]));
+          for (const user of Array.isArray(company.user) ? company.user : []) {
+            if (!user.role || byId.has(user.role.id)) continue;
+            byId.set(user.role.id, {
+              id: user.role.id,
+              name: user.role.name,
+              description: user.role.description ?? "",
+              createdAt: user.role.createdAt ?? "",
+              user: [],
+            });
+          }
+          setRoles([...byId.values()]);
+        } else {
+          const list = await getAllRoles();
+          setRoles(Array.isArray(list) ? list : []);
+        }
       } catch {
         setRoles([]);
       }
     })();
-  }, []);
+  }, [companyId]);
 
   useEffect(() => {
     void loadUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, search]);
+  }, [page, search, companyId]);
 
   const applySearch = () => {
     setPage(1);
@@ -282,8 +355,8 @@ export function UsersSection({ primaryColor }: { primaryColor: string }) {
     setSaving(true);
     try {
       if (modal.type === "add") {
-        const companyId = getStoredCompanyId();
-        if (companyId == null) {
+        const targetCompanyId = companyId ?? getStoredCompanyId();
+        if (targetCompanyId == null) {
           pushToast("Kompaniya ID topilmadi. Qayta login qiling.", "error");
           return;
         }
@@ -293,7 +366,7 @@ export function UsersSection({ primaryColor }: { primaryColor: string }) {
           email: form.email.trim(),
           password: form.password,
           role_id: form.role_id,
-          company_id: companyId,
+          company_id: targetCompanyId,
         };
         await addUser(payload);
         pushToast(`${payload.username} qo'shildi`);
@@ -305,8 +378,8 @@ export function UsersSection({ primaryColor }: { primaryColor: string }) {
           role_id: form.role_id,
         };
         if (form.password.trim()) payload.password = form.password;
-        const companyId = getStoredCompanyId();
-        if (companyId != null) payload.company_id = companyId;
+        const targetCompanyId = companyId ?? getStoredCompanyId();
+        if (targetCompanyId != null) payload.company_id = targetCompanyId;
         await updateUser(modal.user.id, payload);
         pushToast(`${payload.username} yangilandi`);
       }

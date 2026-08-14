@@ -17,10 +17,14 @@ export type Laboratory = {
   analysis: unknown[];
   lab_director: LabDirector;
   lab_assistants: LabAssistant[];
+  company_id?: number | null;
+  companyId?: number | null;
+  company?: { id: number; name?: string } | null;
 };
 
 export type LaboratoryPayload = {
   name: string;
+  company_id?: number;
 };
 
 export type LaboratoryUpdatePayload = {
@@ -32,6 +36,7 @@ export type LaboratoriesFullParams = {
   page?: number;
   limit?: number;
   search?: string;
+  companyId?: number;
 };
 
 export type LaboratoriesFullResponse = {
@@ -80,8 +85,9 @@ function normalizeFullResponse(
   return { data: [], total: 0, page, limit };
 }
 
-export function getAllLaboratories() {
-  return apiRequest<unknown>("/laboratory/getall", {
+export function getAllLaboratories(companyId?: number) {
+  const query = companyId != null ? `?company_id=${companyId}` : "";
+  return apiRequest<unknown>(`/laboratory/getall${query}`, {
     method: "GET",
     fallbackError: "Laboratoriyalarni yuklab bo'lmadi",
   }).then(raw => {
@@ -102,6 +108,7 @@ export async function getLaboratoriesFull(
   if (params.page != null) q.set("page", String(params.page));
   if (params.limit != null) q.set("limit", String(params.limit));
   if (params.search?.trim()) q.set("search", params.search.trim());
+  if (params.companyId != null) q.set("company_id", String(params.companyId));
 
   const qs = q.toString();
   const raw = await apiRequest<unknown>(`/laboratory/getfull${qs ? `?${qs}` : ""}`, {

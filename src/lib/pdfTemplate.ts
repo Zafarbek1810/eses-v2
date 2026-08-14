@@ -1579,13 +1579,16 @@ export async function fetchGlobalPdfTemplates(): Promise<PdfTemplate[]> {
     .filter((t): t is PdfTemplate => t != null);
 }
 
-export async function upsertPdfTemplateGlobal(template: PdfTemplate): Promise<PdfTemplate> {
+export async function upsertPdfTemplateGlobal(
+  template: PdfTemplate,
+  companyIdOverride?: number,
+): Promise<PdfTemplate> {
   const analysisId = resolvePdfTemplateAnalysisId(template);
   if (analysisId == null) {
     throw new Error("Shablon uchun analiz tanlang, keyin saqlang");
   }
 
-  const companyId = getStoredCompanyId();
+  const companyId = companyIdOverride ?? getStoredCompanyId();
   if (companyId == null) {
     throw new Error("Kompaniya aniqlanmadi — qayta kiring");
   }

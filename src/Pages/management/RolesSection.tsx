@@ -7,12 +7,14 @@ import {
 import {
   getAllRoles,
   addRole,
+  addRoleWithCompany,
   updateRole,
   deleteRole,
   type Role,
   type RolePayload,
 } from "@/api/role";
 import { ApiError } from "@/api/client";
+import { getCompanyById } from "@/api/company";
 import { formatDate } from "@/lib/formatDate";
 
 type ToastMsg = { id: number; text: string; type: "success" | "error" };
@@ -131,7 +133,13 @@ function RoleFormModal({
   );
 }
 
-export function RolesSection({ primaryColor }: { primaryColor: string }) {
+export function RolesSection({
+  primaryColor,
+  companyId,
+}: {
+  primaryColor: string;
+  companyId?: number;
+}) {
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -155,8 +163,31 @@ export function RolesSection({ primaryColor }: { primaryColor: string }) {
     setLoading(true);
     setError(null);
     try {
-      const data = await getAllRoles();
-      setRoles(Array.isArray(data) ? data : []);
+      if (companyId != null) {
+        const [data, company] = await Promise.all([
+          getAllRoles(companyId),
+          getCompanyById(companyId),
+        ]);
+        const scoped = (Array.isArray(data) ? data : []).filter(role => {
+          const id = role.company?.id ?? role.company_id ?? role.companyId;
+          return id === companyId;
+        });
+        const byId = new Map(scoped.map(role => [role.id, role]));
+        for (const user of Array.isArray(company.user) ? company.user : []) {
+          if (!user.role || byId.has(user.role.id)) continue;
+          byId.set(user.role.id, {
+            id: user.role.id,
+            name: user.role.name,
+            description: user.role.description ?? "",
+            createdAt: user.role.createdAt ?? "",
+            user: [],
+          });
+        }
+        setRoles([...byId.values()]);
+      } else {
+        const data = await getAllRoles();
+        setRoles(Array.isArray(data) ? data : []);
+      }
     } catch (err) {
       const msg = err instanceof ApiError
         ? err.message
@@ -170,7 +201,7 @@ export function RolesSection({ primaryColor }: { primaryColor: string }) {
 
   useEffect(() => {
     void loadRoles();
-  }, []);
+  }, [companyId]);
 
   const filtered = roles.filter(r => {
     const q = search.toLowerCase();
@@ -186,7 +217,11 @@ export function RolesSection({ primaryColor }: { primaryColor: string }) {
     setSaving(true);
     try {
       if (modal.type === "add") {
-        await addRole(form);
+        if (companyId != null) {
+          await addRoleWithCompany({ ...form, company_id: companyId });
+        } else {
+          await addRole(form);
+        }
         pushToast(`"${form.name}" roli qo'shildi`);
       } else {
         await updateRole(modal.role.id, form);

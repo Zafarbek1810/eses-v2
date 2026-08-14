@@ -282,7 +282,13 @@ function dash(value: number | null | undefined): string {
   return value == null ? "—" : String(value);
 }
 
-export function SuperAdminRegionsPage({ primaryColor }: { primaryColor: string }) {
+export function SuperAdminRegionsPage({
+  primaryColor,
+  onOpenRegionCompanies,
+}: {
+  primaryColor: string;
+  onOpenRegionCompanies?: (regionId: number) => void;
+}) {
   const [regions, setRegions] = useState<Region[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
@@ -491,7 +497,22 @@ export function SuperAdminRegionsPage({ primaryColor }: { primaryColor: string }
                 rows.map((row, idx) => (
                   <tr
                     key={row.region.id}
-                    className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors"
+                    onClick={() => {
+                      if (row.admin) onOpenRegionCompanies?.(row.region.id);
+                    }}
+                    onKeyDown={event => {
+                      if (row.admin && (event.key === "Enter" || event.key === " ")) {
+                        event.preventDefault();
+                        onOpenRegionCompanies?.(row.region.id);
+                      }
+                    }}
+                    tabIndex={row.admin ? 0 : undefined}
+                    title={row.admin ? `${row.region.name} tashkilotlarini ochish` : "Avval viloyatga admin biriktiring"}
+                    className={`border-b border-border last:border-0 transition-colors ${
+                      row.admin
+                        ? "cursor-pointer hover:bg-secondary/50 focus:bg-secondary/50 focus:outline-none"
+                        : "hover:bg-secondary/30"
+                    }`}
                   >
                     <td className="px-4 py-3 text-[13px] text-muted-foreground tabular-nums">{idx + 1}</td>
                     <td className="px-4 py-3">
@@ -520,7 +541,10 @@ export function SuperAdminRegionsPage({ primaryColor }: { primaryColor: string }
                       {row.admin ? (
                         <button
                           type="button"
-                          onClick={() => setModal({ type: "edit", row })}
+                          onClick={event => {
+                            event.stopPropagation();
+                            setModal({ type: "edit", row });
+                          }}
                           className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold transition-colors hover:bg-secondary"
                           style={{ color: primaryColor }}
                         >
@@ -530,7 +554,10 @@ export function SuperAdminRegionsPage({ primaryColor }: { primaryColor: string }
                       ) : (
                         <button
                           type="button"
-                          onClick={() => setModal({ type: "add", row })}
+                          onClick={event => {
+                            event.stopPropagation();
+                            setModal({ type: "add", row });
+                          }}
                           className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-white transition-opacity hover:opacity-90"
                           style={{ background: primaryColor }}
                         >

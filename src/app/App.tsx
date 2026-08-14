@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Settings as SettingsIcon, Settings, ChevronLeft, ChevronDown, Shield,
   Sun, Moon, Monitor, Globe, LogOut, User, Edit3, X, Check,
   Bell, HelpCircle, UserPlus, Wallet, ClipboardList, FileBarChart2, Building2, MapPin,
-  Package, WalletCards,
+  Package, WalletCards, History,
 } from "lucide-react";
 import {
   clearSession,
@@ -19,6 +19,7 @@ import {
   canAccessNav,
   getAllowedNavIds,
   getDefaultNavId,
+  normalizeRoleName,
 } from "@/lib/roles";
 import {
   LoginPage,
@@ -27,8 +28,10 @@ import {
   ManagementPage,
   CompaniesPage,
   SuperAdminRegionsPage,
+  SuperAdminCompanyManagementPage,
   PlansPage,
   SubscriptionsPage,
+  HistoryPage,
   PatientsPage,
   OrderPage,
   OrdersPage,
@@ -38,6 +41,7 @@ import {
   EditProfilePage,
   SettingsPage,
 } from "@/Pages";
+import type { Company } from "@/api/company";
 import {
   isShowResultRoute,
   parseShowResultParams,
@@ -82,15 +86,23 @@ const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, section: "main" },
   { id: "management", label: "Boshqaruv", icon: SettingsIcon, section: "main" },
   { id: "region-admins", label: "Viloyat adminlari", icon: MapPin, section: "main" },
+  { id: "companies", label: "Tashkilot yaratish", icon: Building2, section: "main" },
   { id: "plans", label: "Tariflar", icon: Package, section: "main" },
   { id: "subscriptions", label: "Obunalar", icon: WalletCards, section: "main" },
-  { id: "companies", label: "Tashkilot yaratish", icon: Building2, section: "main" },
   { id: "patients", label: "Ro'yxatga olish", icon: UserPlus, section: "main" },
   { id: "kassa", label: "Kassa", icon: Wallet, section: "main" },
   { id: "orders", label: "Laborant mudiri", icon: ClipboardList, section: "main" },
   { id: "results", label: "Natijalar", icon: FileBarChart2, section: "main" },
+  { id: "history", label: "Tarix", icon: History, section: "main" },
   // { id: "employees", label: "Employees", icon: Users, section: "main" },
 ];
+
+function navItemLabel(id: string, roleName: string | null | undefined, fallback: string): string {
+  if (id === "companies" && normalizeRoleName(roleName) === "admin") {
+    return "Tashkilotlar";
+  }
+  return fallback;
+}
 
 const PRESET_COLORS = [
   "#0D9488", "#0F766E", "#059669", "#0E7490",
@@ -172,10 +184,11 @@ type SidebarProps = {
   onNavChange: (id: string) => void;
   primaryColor: string;
   allowedNavIds: readonly string[];
+  roleName?: string | null;
 };
 
 const Sidebar = ({
-  collapsed, onSidebarToggle, activeNav, onNavChange, primaryColor, allowedNavIds,
+  collapsed, onSidebarToggle, activeNav, onNavChange, primaryColor, allowedNavIds, roleName,
 }: SidebarProps) => {
   const [lang, setLang] = useState("Lotin");
   const langs = [
@@ -185,7 +198,14 @@ const Sidebar = ({
   ];
 
   const allowed = new Set(allowedNavIds);
-  const mainItems = NAV_ITEMS.filter(n => n.section === "main" && allowed.has(n.id));
+  // ROLE_NAV tartibini saqlaymiz (masalan admin: Tashkilotlar → Tariflar)
+  const mainItems = allowedNavIds
+    .map(id => NAV_ITEMS.find(n => n.id === id && n.section === "main" && allowed.has(n.id)))
+    .filter((n): n is (typeof NAV_ITEMS)[number] => n != null)
+    .map(item => ({
+      ...item,
+      label: navItemLabel(item.id, roleName, item.label),
+    }));
 
   return (
     <aside
@@ -389,7 +409,10 @@ const Header = ({
   const navLabel =
     navLabelOverride ??
     (isUserPage(activeNav) ? USER_PAGE_LABELS[activeNav] : undefined) ??
-    NAV_ITEMS.find(n => n.id === activeNav)?.label ??
+    (() => {
+      const item = NAV_ITEMS.find(n => n.id === activeNav);
+      return item ? navItemLabel(item.id, user?.role?.name, item.label) : undefined;
+    })() ??
     "Dashboard";
 
   useEffect(() => {
@@ -751,26 +774,37 @@ const Dashboard = ({
   const [activeNav, setActiveNav] = useState<string>(defaultNav);
   const [orderPatientId, setOrderPatientId] = useState<number | null>(null);
   const [editPatientId, setEditPatientId] = useState<number | null>(null);
+  const [companiesRegionId, setCompaniesRegionId] = useState<number | null>(null);
+  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
 
   useEffect(() => {
     if (isUserPage(activeNav)) return;
-    if (!canAccessNav(roleName, activeNav)) {
+    const hasScopedCompaniesAccess =
+      activeNav === "companies"
+      && companiesRegionId != null
+      && canAccessNav(roleName, "region-admins");
+    if (!canAccessNav(roleName, activeNav) && !hasScopedCompaniesAccess) {
       setActiveNav(defaultNav);
       setOrderPatientId(null);
       setEditPatientId(null);
+      setCompaniesRegionId(null);
     }
-  }, [roleName, activeNav, defaultNav]);
+  }, [roleName, activeNav, defaultNav, companiesRegionId]);
 
   const handleNavChange = (id: string) => {
     if (!canAccessNav(roleName, id)) return;
+    setSelectedCompany(null);
     setActiveNav(id);
     if (id !== "kassa") setOrderPatientId(null);
     if (id !== "patients") setEditPatientId(null);
+    if (id !== "companies") setCompaniesRegionId(null);
   };
 
   const handleUserNav = (id: UserPageId) => {
     setOrderPatientId(null);
     setEditPatientId(null);
+    setCompaniesRegionId(null);
+    setSelectedCompany(null);
     setActiveNav(id);
   };
 
@@ -786,6 +820,13 @@ const Dashboard = ({
     setOrderPatientId(null);
     setEditPatientId(patientId);
     setActiveNav("patients");
+  };
+
+  const handleOpenRegionCompanies = (regionId: number) => {
+    if (!canAccessNav(roleName, "region-admins")) return;
+    setCompaniesRegionId(regionId);
+    setSelectedCompany(null);
+    setActiveNav("companies");
   };
 
   const renderPage = () => {
@@ -819,7 +860,11 @@ const Dashboard = ({
       );
     }
 
-    if (!canAccessNav(roleName, activeNav)) return null;
+    const hasScopedCompaniesAccess =
+      activeNav === "companies"
+      && companiesRegionId != null
+      && canAccessNav(roleName, "region-admins");
+    if (!canAccessNav(roleName, activeNav) && !hasScopedCompaniesAccess) return null;
     if (activeNav === "kassa") {
       return (
         <OrderPage
@@ -844,10 +889,43 @@ const Dashboard = ({
     }
     if (activeNav === "employees") return <EmployeesPage primaryColor={primaryColor} />;
     if (activeNav === "management") return <ManagementPage primaryColor={primaryColor} />;
-    if (activeNav === "companies") return <CompaniesPage primaryColor={primaryColor} />;
-    if (activeNav === "region-admins") return <SuperAdminRegionsPage primaryColor={primaryColor} />;
+    if (activeNav === "companies") {
+      const normalizedRole = normalizeRoleName(roleName);
+      const canOpenCompanyManagement =
+        normalizedRole === "super_admin" || normalizedRole === "admin";
+      if (selectedCompany && canOpenCompanyManagement) {
+        return (
+          <SuperAdminCompanyManagementPage
+            companyId={selectedCompany.id}
+            companyName={selectedCompany.name}
+            primaryColor={primaryColor}
+            onBack={() => setSelectedCompany(null)}
+          />
+        );
+      }
+      return (
+        <CompaniesPage
+          primaryColor={primaryColor}
+          scopedRegionId={companiesRegionId}
+          onOpenCompany={
+            canOpenCompanyManagement
+              ? company => setSelectedCompany(company)
+              : undefined
+          }
+        />
+      );
+    }
+    if (activeNav === "region-admins") {
+      return (
+        <SuperAdminRegionsPage
+          primaryColor={primaryColor}
+          onOpenRegionCompanies={handleOpenRegionCompanies}
+        />
+      );
+    }
     if (activeNav === "plans") return <PlansPage primaryColor={primaryColor} />;
     if (activeNav === "subscriptions") return <SubscriptionsPage primaryColor={primaryColor} />;
+    if (activeNav === "history") return <HistoryPage />;
     if (activeNav === "dashboard") return <DashboardPage primaryColor={primaryColor} />;
     return null;
   };
@@ -861,10 +939,12 @@ const Dashboard = ({
         onNavChange={handleNavChange}
         primaryColor={primaryColor}
         allowedNavIds={allowedNavIds}
+        roleName={roleName}
       />
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
         <Header
           activeNav={activeNav}
+          navLabelOverride={selectedCompany ? `${selectedCompany.name} boshqaruvi` : undefined}
           isDark={isDark}
           onDarkToggle={onDarkToggle}
           onSettingsOpen={onSettingsOpen}

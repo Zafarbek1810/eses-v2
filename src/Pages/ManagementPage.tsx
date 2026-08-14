@@ -8,19 +8,34 @@ import { AnalysesSection } from "./management/AnalysesSection";
 import { PatternsSection } from "./management/PatternsSection";
 import { PdfTemplateSection } from "./management/PdfTemplateSection";
 import { GlobalPdfTemplateSection } from "./management/GlobalPdfTemplateSection";
+import {
+  BaseAnalysesSection,
+  BaseLaboratoriesSection,
+} from "./management/BaseCatalogSections";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { PdfTemplate } from "@/lib/pdfTemplate";
 import type { Analysis } from "@/api/analysis";
 import { analysisHasOnlineStorage } from "@/api/analysis";
 import type { PdfOpenForAnalysis } from "./management/PdfTemplateSection";
 
-type TabId = "roles" | "users" | "laboratories" | "analyses" | "patterns" | "pdf" | "globalPdf";
+type TabId =
+  | "roles"
+  | "users"
+  | "laboratories"
+  | "analyses"
+  | "baseLaboratories"
+  | "baseAnalyses"
+  | "patterns"
+  | "pdf"
+  | "globalPdf";
 
 const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: "roles", label: "Rollar", icon: Shield },
   { id: "users", label: "Foydalanuvchilar", icon: Users },
   { id: "laboratories", label: "Laboratoriyalar", icon: FlaskConical },
   { id: "analyses", label: "Analizlar", icon: TestTube2 },
+  { id: "baseLaboratories", label: "Global laboratoriyalar", icon: Globe },
+  { id: "baseAnalyses", label: "Global analizlar", icon: Globe },
   // { id: "patterns", label: "Analiz shablonlari", icon: LayoutTemplate },
   { id: "pdf", label: "PDF shablon", icon: FileType },
   { id: "globalPdf", label: "Global PDF shablon", icon: Globe },
@@ -79,6 +94,16 @@ export function ManagementPage({ primaryColor }: { primaryColor: string }) {
             primaryColor={primaryColor}
             onOpenPdfTemplate={openPdfForAnalysis}
           />
+        </ErrorBoundary>
+      )}
+      {activeTab === "baseLaboratories" && (
+        <ErrorBoundary fallbackTitle="Global laboratoriyalar bo'limida xatolik">
+          <BaseLaboratoriesSection primaryColor={primaryColor} />
+        </ErrorBoundary>
+      )}
+      {activeTab === "baseAnalyses" && (
+        <ErrorBoundary fallbackTitle="Global analizlar bo'limida xatolik">
+          <BaseAnalysesSection primaryColor={primaryColor} />
         </ErrorBoundary>
       )}
       {activeTab === "patterns" && <PatternsSection primaryColor={primaryColor} />}
