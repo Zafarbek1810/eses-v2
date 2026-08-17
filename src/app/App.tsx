@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useState, useEffect, useRef, useMemo } from "react";
 import {
-  LayoutDashboard, Users, Settings as SettingsIcon, Settings, ChevronLeft, ChevronDown, Shield,
+  LayoutDashboard, Users, Settings as SettingsIcon, Settings, ChevronLeft, ChevronDown,
   Sun, Moon, Monitor, Globe, LogOut, User, Edit3, X, Check,
   Bell, HelpCircle, UserPlus, Wallet, ClipboardList, FileBarChart2, Building2, MapPin,
   Package, WalletCards, History,
@@ -46,6 +46,7 @@ import {
   isShowResultRoute,
   parseShowResultParams,
 } from "@/lib/showResultLink";
+import sesLogo from "@/images/ses.jpg";
 
 /** User-menu pages — available to every authenticated role. */
 const USER_PAGE_IDS = ["profile", "edit-profile", "settings"] as const;
@@ -83,7 +84,7 @@ function getStoredPrimaryColor(): string {
 // ─── Data ────────────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, section: "main" },
+  { id: "dashboard", label: "Bosh sahifa", icon: LayoutDashboard, section: "main" },
   { id: "management", label: "Boshqaruv", icon: SettingsIcon, section: "main" },
   { id: "region-admins", label: "Viloyat adminlari", icon: MapPin, section: "main" },
   { id: "companies", label: "Tashkilot yaratish", icon: Building2, section: "main" },
@@ -231,12 +232,11 @@ const Sidebar = ({
           }`}
         >
           <div className={`flex items-center gap-3 min-w-0 ${collapsed ? "" : "flex-1"}`}>
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-md"
-              style={{ background: `linear-gradient(135deg, ${primaryColor}, ${primaryColor}CC)` }}
-            >
-              <Shield className="w-[18px] h-[18px] text-white" />
-            </div>
+            <img
+              src={sesLogo}
+              alt="SES"
+              className="w-10 h-10 rounded-full object-cover shrink-0 shadow-md bg-white"
+            />
             {!collapsed && (
               <div className="overflow-hidden min-w-0">
                 <div className="flex items-center gap-1.5">
@@ -829,6 +829,12 @@ const Dashboard = ({
     setActiveNav("companies");
   };
 
+  const handleBackToRegionAdmins = () => {
+    setSelectedCompany(null);
+    setCompaniesRegionId(null);
+    setActiveNav("region-admins");
+  };
+
   const renderPage = () => {
     if (activeNav === "profile") {
       return (
@@ -907,6 +913,7 @@ const Dashboard = ({
         <CompaniesPage
           primaryColor={primaryColor}
           scopedRegionId={companiesRegionId}
+          onBack={companiesRegionId != null ? handleBackToRegionAdmins : undefined}
           onOpenCompany={
             canOpenCompanyManagement
               ? company => setSelectedCompany(company)

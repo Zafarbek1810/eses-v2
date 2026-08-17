@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Plus, Search, X, Edit3, Trash2, RefreshCw, Building2,
   CheckCircle, AlertCircle, Loader2, Eye, EyeOff,
-  ChevronLeft, ChevronsLeft, ChevronsRight, MapPin,
+  ChevronLeft, ChevronsLeft, ChevronsRight, MapPin, ArrowLeft,
 } from "lucide-react";
 import {
   getCompaniesFull,
@@ -736,10 +736,12 @@ function CompanyCreateModal({
 export function CompaniesPage({
   primaryColor,
   scopedRegionId,
+  onBack,
   onOpenCompany,
 }: {
   primaryColor: string;
   scopedRegionId?: number | null;
+  onBack?: () => void;
   onOpenCompany?: (company: Company) => void;
 }) {
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -960,6 +962,16 @@ export function CompaniesPage({
 
   return (
     <main className="flex-1 overflow-y-auto p-6 space-y-5 ses-scrollbar">
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-[13px] font-semibold text-foreground transition-colors hover:bg-secondary"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Viloyat adminlariga qaytish
+        </button>
+      )}
       <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
         <div className="flex items-center gap-3 px-5 py-4 border-b border-border flex-wrap">
           <div className="flex items-center gap-2 bg-secondary rounded-xl px-3.5 py-2.5 flex-1 min-w-[180px]">
